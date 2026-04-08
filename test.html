@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Aşına · Firebase Tanı</title>
+<style>
+body{font-family:sans-serif;max-width:640px;margin:40px auto;padding:20px;background:#FBF7F4;color:#1A0F14;}
+h2{color:#4C2744;}
+.card{background:white;border-radius:12px;padding:20px;margin:16px 0;border:1px solid #ECD8CF;}
+.btn{background:#4C2744;color:#F6E2C7;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;margin:4px;}
+.btn:disabled{opacity:.5;}
+.btn-g{background:#27AE60;color:white;}
+.log{font-size:13px;line-height:1.9;margin-top:12px;}
+.ok{color:#27AE60;font-weight:600;}
+.err{color:#FF3B30;font-weight:600;}
+.warn{color:#9B4C35;font-weight:600;}
+.info{color:#4C2744;}
+code{background:#F5EBF0;padding:2px 6px;border-radius:4px;font-size:12px;}
+pre{background:#1A0F14;color:#F6E2C7;padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;}
+</style>
+</head>
+<body>
+<h2>🔥 Firebase Bağlantı Tanı</h2>
+
+<div class="card">
+  <b>1. Bağlantı Testi</b>
+  <div class="log" id="conn-log">Hazırlanıyor...</div>
+  <button class="btn" onclick="testConn()">Bağlantıyı Test Et</button>
+</div>
+
+<div class="card">
+  <b>2. Okuma/Yazma Testi</b>
+  <div class="log" id="rw-log">Önce bağlantı testini yap.</div>
+  <button class="btn" id="rw-btn" onclick="testRW()" disabled>Okuma/Yazma Test Et</button>
+</div>
+
+<div class="card">
+  <b>3. Menü Verisi Yükle</b>
+  <div class="log" id="seed-log">Önce testleri geç.</div>
+  <button class="btn btn-g" id="seed-btn" onclick="seedMenu()" disabled>🚀 Menüyü Firebase'e Yükle</button>
+</div>
+
+<div class="card" id="rules-card" style="display:none">
+  <b>⚠️ Firebase Kuralları Sorunu</b>
+  <p style="font-size:13px;color:#7A5F6A;margin:8px 0">Firebase konsolunda şu kuralları ayarla:</p>
+  <pre>{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</pre>
+  <p style="font-size:12px;color:#9B4C35">Adım: Firebase Console → Realtime Database → Rules → Düzenle → Yayımla</p>
+</div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getDatabase, ref, set, get, onValue, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+const app = initializeApp({
+  apiKey: "AIzaSyA8FUE8jnNZ2bVZ761TH4DFvG2DYxDvnfU",
+  authDomain: "asina-pos.firebaseapp.com",
+  databaseURL: "https://asina-pos-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "asina-pos"
+});
+const db  = getDatabase(app);
+const auth = getAuth(app);
+const prov = new GoogleAuthProvider();
+
+// Giriş gerek
+onAuthStateChanged(auth, user => {
+  if (!user) {
+    document.getElementById('conn-log').innerHTML =
+      '<div class="warn">🔒 Önce giriş yapmalısın: <button onclick="signInWithPopup(auth,prov).catch(()=>{})" style="background:#4C2744;color:#F6E2C7;border:none;border-radius:8px;padding:6px 14px;cursor:pointer;font-weight:600">Google ile Giriş</button></div>';
+    document.getElementById('rw-btn').disabled  = true;
+    document.getElementById('seed-btn').disabled = true;
+  } else {
+    document.getElementById('conn-log').innerHTML = '<div class="ok">✅ Giriş yapıldı: ' + user.email + '</div>';
+  }
+});
+
+function log(id, msg, cls='info') {
+  document.getElementById(id).innerHTML += `<div class="${cls}">${msg}</div>`;
+}
+function clearLog(id) { document.getElementById(id).innerHTML = ''; }
+
+// Bağlantı durumu otomatik
+onValue(ref(db, '.info/connected'), snap => {
+  const ok = snap.val() === true;
+  clearLog('conn-log');
+  if (ok) {
+    log('conn-log', '✅ Firebase\'e bağlandı! (europe-west1)', 'ok');
+    log('conn-log', '✅ databaseURL doğru', 'ok');
+    log('conn-log', '✅ apiKey geçerli', 'ok');
+    document.getElementById('rw-btn').disabled = false;
+  } else {
+    log('conn-log', '⏳ Bağlanıyor...', 'warn');
+    log('conn-log', '(İnternet bağlantını kontrol et)', 'info');
+  }
+});
+
+window.testConn = function() {
+  clearLog('conn-log');
+  log('conn-log', '🔄 Test ediliyor...', 'info');
+};
+
+window.testRW = async function() {
+  clearLog('rw-log');
+  log('rw-log', '🔄 Test verisi yazılıyor...', 'info');
+  try {
+    await set(ref(db, '_test/ping'), { ts: Date.now(), msg: 'test' });
+    log('rw-log', '✅ YAZMA başarılı', 'ok');
+
+    const snap = await get(ref(db, '_test/ping'));
+    if (snap.val()) {
+      log('rw-log', '✅ OKUMA başarılı: ' + JSON.stringify(snap.val()), 'ok');
+    }
+
+    await remove(ref(db, '_test'));
+    log('rw-log', '✅ SİLME başarılı', 'ok');
+    log('rw-log', '🎉 Tüm testler geçti! Firebase hazır.', 'ok');
+    document.getElementById('seed-btn').disabled = false;
+
+  } catch(err) {
+    log('rw-log', '❌ HATA: ' + err.message, 'err');
+    if (err.message.includes('PERMISSION_DENIED') || err.message.includes('permission')) {
+      log('rw-log', '⚠️ Güvenlik kuralları erişimi engelliyor!', 'warn');
+      document.getElementById('rules-card').style.display = 'block';
+      document.getElementById('rules-card').scrollIntoView({behavior:'smooth'});
+    } else if (err.message.includes('network') || err.message.includes('fetch')) {
+      log('rw-log', '⚠️ Ağ hatası — internet bağlantını kontrol et', 'warn');
+    }
+  }
+};
+
+const MENU = [
+  {id:1,cat:'Mevsime Özel',name:'Salep',price:200,emoji:'❄️'},
+  {id:2,cat:'Mevsime Özel',name:'Boza',price:150,emoji:'🫙'},
+  {id:3,cat:'Mevsime Özel',name:'Altın Salep',price:220,emoji:'✨'},
+  {id:4,cat:'Sıcak Çikolata',name:'Klasik',price:180,emoji:'🍫'},
+  {id:5,cat:'Sıcak Çikolata',name:'Gülpembe',price:200,emoji:'🌸'},
+  {id:6,cat:'Sıcak Çikolata',name:'Pamuk Prens',price:200,emoji:'🤍'},
+  {id:7,cat:'Sıcak Çikolata',name:'Vegan Bitter',price:200,emoji:'🌱'},
+  {id:8,cat:'Sıcak Çikolata',name:'İrlanda Usulü',price:400,emoji:'🥃'},
+  {id:9,cat:'Matcha',name:'Matcha',price:180,emoji:'🍵'},
+  {id:10,cat:'Matcha',name:'Matcha Latte',price:200,emoji:'🍵'},
+  {id:11,cat:'Matcha',name:'Vanilyalı Matcha',price:220,emoji:'🌿'},
+  {id:12,cat:'Matcha',name:'Zerdeçal Matcha',price:220,emoji:'💛'},
+  {id:13,cat:'Matcha',name:'Salep Matcha',price:230,emoji:'🍵'},
+  {id:14,cat:'Matcha',name:'Muzlu Matcha',price:230,emoji:'🍌'},
+  {id:15,cat:'Matcha',name:'Beyaz Çik. Matcha',price:230,emoji:'🤍'},
+  {id:16,cat:'Sütlü Çay',name:'Altın Süt',price:180,emoji:'✨'},
+  {id:17,cat:'Sütlü Çay',name:'Masala Çayı',price:180,emoji:'🌶️'},
+  {id:18,cat:'Bitki Çayı',name:'Kaynar',price:150,emoji:'🌿'},
+  {id:19,cat:'Bitki Çayı',name:'Kış Güneşi',price:150,emoji:'☀️'},
+  {id:20,cat:'Bitki Çayı',name:'Yeşil Bahçe',price:150,emoji:'🌱'},
+  {id:21,cat:'Bitki Çayı',name:'Tatlı Elma',price:150,emoji:'🍎'},
+  {id:22,cat:'Bitki Çayı',name:'Adaçayı',price:120,emoji:'🌿'},
+  {id:23,cat:'Bitki Çayı',name:'Ihlamur',price:120,emoji:'🌼'},
+  {id:24,cat:'Klasikler',name:'Sıcak Şarap',price:350,emoji:'🍷'},
+  {id:25,cat:'Klasikler',name:'Sakızlı Türk Kahvesi',price:140,emoji:'☕'},
+  {id:26,cat:'Klasikler',name:'Türk Kahvesi',price:120,emoji:'☕'},
+  {id:27,cat:'Klasikler',name:'Demleme Çay',price:45,emoji:'🫖'},
+  {id:28,cat:'Klasikler',name:'Maden Suyu',price:60,emoji:'💧'},
+  {id:29,cat:'Klasikler',name:'Şişe Su',price:55,emoji:'🧊'},
+  {id:30,cat:'Ekstralar',name:'İlave Bal',price:20,emoji:'🍯'},
+  {id:31,cat:'Ekstralar',name:'Akçaağaç Şurubu',price:40,emoji:'🍁'},
+  {id:32,cat:'Ekstralar',name:'Ev Yapımı Yulaf Sütü',price:35,emoji:'🌾'},
+];
+
+window.seedMenu = async function() {
+  clearLog('seed-log');
+  document.getElementById('seed-btn').disabled = true;
+  try {
+    log('seed-log', '📦 ' + MENU.length + ' ürün yazılıyor...', 'info');
+    const menuObj = {};
+    MENU.forEach(i => { menuObj['id_'+i.id] = i; });
+    await set(ref(db, 'menu'), menuObj);
+    log('seed-log', '✅ Menü yüklendi!', 'ok');
+
+    await set(ref(db, 'settings'), {
+      catOrder: ['Mevsime Özel','Sıcak Çikolata','Matcha','Sütlü Çay','Bitki Çayı','Klasikler','Ekstralar'],
+      catEmojis: {'Mevsime Özel':'❄️','Sıcak Çikolata':'🍫','Matcha':'🍵','Sütlü Çay':'🥛','Bitki Çayı':'🌿','Klasikler':'☕','Ekstralar':'✨'}
+    });
+    log('seed-log', '✅ Kategori ayarları yüklendi!', 'ok');
+    log('seed-log', '🎉 Hazır! Şimdi uygulamayı aç — menü görünecek.', 'ok');
+    log('seed-log', '→ <a href="index.html">Uygulamayı Aç</a> | <a href="admin.html">Admin Panel</a>', 'ok');
+  } catch(err) {
+    log('seed-log', '❌ ' + err.message, 'err');
+    document.getElementById('seed-btn').disabled = false;
+  }
+};
+</script>
+</body>
+</html>
