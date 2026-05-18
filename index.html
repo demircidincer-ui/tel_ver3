@@ -1661,7 +1661,12 @@ function closeStockOut(e) {
 }
 
 function renderStockPopup() {
-  const items = getIceItems();
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const wMap = {};
+  (window._orders || []).filter(o => o.status === 'paid' && o.date >= weekAgo)
+    .forEach(o => (o.items || []).forEach(it => { wMap[it.itemId] = (wMap[it.itemId] || 0) + (it.qty || 0); }));
+
+  const items = getIceItems().slice().sort((a, b) => (wMap[b.id] || 0) - (wMap[a.id] || 0));
   if (!items.length) {
     document.getElementById('stock-popup-body').innerHTML =
       '<div style="text-align:center;color:var(--text-muted);padding:20px">Menüde "Dondurma" kategorisi bulunamadı.</div>';
@@ -1671,7 +1676,8 @@ function renderStockPopup() {
     const kg = getIceStockKg(item.id);
     const data = (window._iceStock || {})[item.id] || {};
     const spk = data.scoopsPerKg || 13;
-    const kgStr = kg === null ? '—' : kg.toFixed(1) + ' kg';
+    const scoops = kg === null ? null : Math.round(kg * spk);
+    const kgStr = kg === null ? '—' : kg.toFixed(1) + ' kg · ~' + scoops + ' top';
     const cls = kg === null ? '' : kg <= 1 ? 'low' : kg <= 2 ? 'warn' : 'ok';
     const icon = kg !== null && kg <= 1 ? ' ⚠️' : '';
     return `
